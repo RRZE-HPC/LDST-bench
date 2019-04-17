@@ -1,0 +1,124 @@
+#!/bin/bash
+
+if [ "$#" -le 5 ]; then
+    echo "Usage : ./bench.sh [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -v[OPTIONAL]"
+    exit
+fi
+
+method=$1
+compiler=$2
+nthread=$3
+nload=$4
+nstore=$5
+size=$6
+verbose=$7
+#repeat=$7
+
+save_dir=$PWD
+
+SRC_FOLDER="src"
+#echo string in between two string in a file
+cp $SRC_FOLDER/bench.cpp.in $SRC_FOLDER/bench.cpp
+
+regions=$(grep "#UNROLL_BEGIN(" $SRC_FOLDER/bench.cpp.in | cut -d"(" -f2 | cut -d"," -f 1 | sort -u)
+numRegion=$(echo $regions | wc -w)
+unroll_factor=$(grep "#UNROLL_BEGIN(" $SRC_FOLDER/bench.cpp.in | cut -d"(" -f2 \
+    | cut -d")" -f 1 | sort -u | cut -d"," -f2 )
+#nload_arr=$(echo "$nload-$nstore" | bc)
+unroll_factor=$(echo $unroll_factor | sed -e "s@LOAD@$nload@g")
+unroll_factor=$(echo $unroll_factor | sed -e "s@STORE@$nstore@g")
+numUnroll=$(echo $unroll_factor | wc -w)
+if (( $(echo "$numRegion != $numUnroll" |bc -l) )); then
+    echo "Error in template file ($SRC_FOLDER/bench.cpp.in), Unroll factor has to be equal" \
+    "for regions with same name"
+fi
+
+region_ctr=1
+for region in $regions; do
+    code=$(awk "/#UNROLL_BEGIN\($region/{flag=1;next}/#UNROLL_END#/{flag=0}flag" $SRC_FOLDER/bench.cpp)
+    # | head -n 1)
+    echo $code > "$region""_template_file.txt"
+    let region_ctr=$region_ctr+1
+done
+
+#NOW unroll ld and st
+region_ctr=1
+for region in $regions; do
+    unroll_time=$(echo $unroll_factor | cut -d" " -f$region_ctr)
+    ld_unrolled=""
+    for (( i=0; i<$unroll_time; i++ )); do
+        ld=$(./substitute.sh "@" "$i" "$region""_template_file.txt")
+        ld_unrolled=$(echo "$ld_unrolled" "$ld")
+    done
+    rm -r "$region""_template_file.txt"
+    #echo $ld_unrolled
+    #NOW replace LD with unrolled version
+    sed -i "/#UNROLL_BEGIN($region/,/#UNROLL_END#/c\ $ld_unrolled" $SRC_FOLDER/bench.cpp
+    let region_ctr=$region_ctr+1
+done
+
+opt_level=3
+
+if [[ "$method" = "C" ]]; then
+#    echo "$method code benchmark called"
+    extra_flag="-DCODE_IN_C"
+fi
+
+if [[ "$method" = "INTEL_ASM"* ]]; then
+    vec_type=$(echo $method | cut -d":" -f2)
+#    echo "$method code benchmark called"
+    extra_flag="-DCODE_IN_INTEL_ASM -D$vec_type"
+
+#    if [[ "$compiler" = "g++" ]]; then
+#        echo "WARNING: Optimisation Level turned down to O0; else load will be"\
+#        "vectorised away"
+#        opt_level=0
+#    fi
+fi
+
+if [[ "$method" = "ARM_ASM"* ]]; then
+    vec_type=$(echo $method | cut -d":" -f2)
+#    echo "$method code benchmark called"
+    extra_flag="-DCODE_IN_ARM_ASM -D$vec_type"
+fi
+
+
+#generate assembly for reference
+if [ "$verbose" = "-v" ]; then
+    CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
+        OPT_LEVEL=-O$opt_level make asm
+else
+    CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
+        OPT_LEVEL=-O$opt_level make asm &> /dev/null
+fi
+
+#remove all vaddpd; to benchmark load and store
+#sed -i "s/vaddpd.*//g" bench.s
+
+#now build the benchmark
+#CXX=icpc LOAD=$nload STORE=$nstore SIZE=$size make from_asm
+if [ "$verbose" = "-v" ]; then
+    CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
+        OPT_LEVEL=-O$opt_level make
+else
+    CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
+        OPT_LEVEL=-O$opt_level make &> /dev/null
+fi
+
+
+#if [[ $nthread == -1 ]]; then
+#    nthread=$($tool_dir/threadPerSocket.sh)
+#fi
+#OMP_NUM_THREADS=$nthread KMP_AFFINITY=granularity=fine,compact,1,0 taskset -c \
+#0-$((nthread-1)) ./bench_exec #$repeat
+
+OMP_NUM_THREADS=$nthread OMP_PLACES=cores"($nthread)" OMP_PROC_BIND=close \
+./bench_exec #$repeat
+
+
+#cd $save_dir
+if [ "$verbose" = "-v" ]; then
+    make clean
+else
+    make clean &> /dev/null
+fi

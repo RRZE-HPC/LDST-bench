@@ -1,0 +1,264 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include "dummy.h"
+#include "timing.h"
+#include "omp.h"
+#include <math.h>
+#include "intel_intrin.h"
+#include "arm_intrin.h"
+
+inline void bench_fn(int id, int *myStart, double **ld_ptr, double **st_ptr)
+{
+#ifdef CODE_IN_C
+    double ld_val = 1;
+#else
+    VAR ld_val;
+#endif
+
+    int unroll_fac = 1;
+#ifdef CODE_IN_C
+    unroll_fac = 1;
+#else
+    unroll_fac = ASM_UNROLL*4;
+#endif
+
+#pragma vector temporal
+#pragma simd
+    for(int i=myStart[id]; i<myStart[id+1]; i+=unroll_fac)
+    {
+#ifdef CODE_IN_INTEL_ASM //Intel intrin
+        //#UNROLL_BEGIN(Intel_ld, LOAD)#
+        double* curr_ld_ptr_@ = ld_ptr[@];
+        VAR tmp1ld@ = (ASM(load)(&curr_ld_ptr_@[i]));
+        VAR tmp2ld@ = (ASM(load)(&curr_ld_ptr_@[i+ASM_UNROLL]));
+        VAR tmp3ld@ = (ASM(load)(&curr_ld_ptr_@[i+2*ASM_UNROLL]));
+        VAR tmp4ld@ = (ASM(load)(&curr_ld_ptr_@[i+3*ASM_UNROLL]));
+        ld_val = ASM(add)(ld_val, tmp1ld@);
+        ld_val = ASM(add)(ld_val, tmp2ld@);
+        ld_val = ASM(add)(ld_val, tmp3ld@);
+        ld_val = ASM(add)(ld_val, tmp4ld@);
+        //#UNROLL_END#
+        //#UNROLL_BEGIN(Intel_st, STORE)#
+        double* curr_st_ptr_@ = st_ptr[@];
+        VAR tmp1st@; ASM(store)(&curr_st_ptr_@[i], tmp1st@);
+        VAR tmp2st@; ASM(store)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
+        VAR tmp3st@; ASM(store)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
+        VAR tmp4st@; ASM(store)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
+        //#UNROLL_END#
+#elif defined(CODE_IN_ARM_ASM) //Intel intrin
+        //#UNROLL_BEGIN(Arm_ld, LOAD)#
+        double* curr_ld_ptr_@ = ld_ptr[@];
+        VAR tmp1ld@ = (ASM(ld1)(&curr_ld_ptr_@[i]));
+        VAR tmp2ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+ASM_UNROLL]));
+        VAR tmp3ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+2*ASM_UNROLL]));
+        VAR tmp4ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+3*ASM_UNROLL]));
+        ld_val = ASM(add)(ld_val, tmp1ld@);
+        ld_val = ASM(add)(ld_val, tmp2ld@);
+        ld_val = ASM(add)(ld_val, tmp3ld@);
+        ld_val = ASM(add)(ld_val, tmp4ld@);
+        //#UNROLL_END#
+        //#UNROLL_BEGIN(Arm_st, STORE)#
+        double* curr_st_ptr_@ = st_ptr[@];
+        VAR tmp1st@; ASM(st1)(&curr_st_ptr_@[i], tmp1st@);
+        VAR tmp2st@; ASM(st1)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
+        VAR tmp3st@; ASM(st1)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
+        VAR tmp4st@; ASM(st1)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
+        //#UNROLL_END#
+#else
+        //need to unroll it completely
+        //#UNROLL_BEGIN(C_ld, LOAD)#
+        ld_val += ld_ptr[@][i];
+        //#UNROLL_END#
+
+        //#UNROLL_BEGIN(C_st, STORE)#
+        st_ptr[@][i] += ld_val;
+        //#UNROLL_END#
+#endif
+    }
+
+    dummy(ld_ptr[0], st_ptr[0], &ld_val);
+}
+
+inline void* aligned_malloc(size_t size, size_t align) {
+    // Based on http://stackoverflow.com/q/16376942
+    void *result;
+    #if defined(_MSC_VER)
+        result = _aligned_malloc(size, align);
+    //#elif defined(__INTEL_COMPILER)
+         result = _mm_malloc(size, align);
+    #else
+         if(posix_memalign(&result, align, size)) result = 0;
+    #endif
+    return result;
+}
+
+//This includes benchmarks to measure bandwidth depending on LD:ST ratios
+//return bw in GB/s
+//minimum ratio is 1; i.e 1 load and 1 store; and load >= store
+double measure_bw(int repeat)
+{
+    int ld = LOAD;
+    int st = STORE;
+
+/*    if(ld < st)
+    {
+        printf("Error : LD streams has to be greater than ST; i.e LD:ST >= 1\n");
+        exit(-1);
+    }*/
+
+/*    if(st == 0)
+    {
+#ifdef CODE_IN_C
+        printf("Error : LD only bench not supported for C version\n");
+        exit(-1);
+#endif
+    }*/
+
+    int LD_stream_sz = ld; //(ld-st);
+    int ST_stream_sz = st;
+
+    int nthreads = 1;
+
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+            nthreads =omp_get_num_threads();
+        }
+    }
+
+
+    //calculate N depending on SIZE (which is in MB)
+    int N_per_thread = (int)(SIZE*1000.0*1000.0/(8*(double)(LD_stream_sz+ST_stream_sz)));
+    //make N_per_thread multiple of 128
+    N_per_thread = ceil(N_per_thread/128.0)*128; //N_per_thread + (64-N_per_thread%64);
+    int N=N_per_thread*nthreads;
+
+    //we need ST times ld+store streams and (LD-ST) times pure load streams
+    double* ld_stream = (double*) aligned_malloc((LD_stream_sz)*sizeof(double)*N, 64);
+    double* st_stream = (double*) aligned_malloc((ST_stream_sz)*sizeof(double)*N, 32);
+
+    double** ld_ptr = (double**) malloc((LD_stream_sz)*sizeof(double*));
+    double** st_ptr = (double**) malloc((ST_stream_sz)*sizeof(double*));
+
+    //init ptrs
+    for(int i=0; i<LD_stream_sz; ++i)
+    {
+        ld_ptr[i] = &(ld_stream[i*N]);
+    }
+
+    for(int i=0; i<ST_stream_sz; ++i)
+    {
+        st_ptr[i] = &(st_stream[i*N]);
+    }
+
+    int* myStart = (int*) malloc((nthreads+1)*sizeof(int));
+
+    for(int t=0; t<nthreads; ++t)
+    {
+        myStart[t] = t*N_per_thread;
+    }
+
+    myStart[nthreads] = N;
+
+#pragma omp parallel
+    {
+        int id = omp_get_thread_num();
+        for(int i=myStart[id]; i<myStart[id+1]; i++)
+        {
+            for(int j=0; j<LD_stream_sz; ++j)
+            {
+                ld_ptr[j][i] = 2.0*j*i;
+            }
+            for(int j=0; j<ST_stream_sz; ++j)
+            {
+                st_ptr[j][i] = 1.0*j*i;
+            }
+        }
+    }
+
+    int warm_up = 20;
+    //warm-up
+#pragma omp parallel
+    {
+        int id = omp_get_thread_num();
+        for(int r=0; r<warm_up; ++r)
+        {
+            bench_fn(id, myStart, ld_ptr, st_ptr);
+        }
+    }
+    START_TIME(bench);
+    double bench_time = 0;
+
+    long int num_times = 0;
+
+    //create benchmark
+    while(bench_time < 1)
+    {
+        num_times += 1;
+#pragma omp parallel
+        {
+            int id = omp_get_thread_num();
+
+            for(int r=0; r<repeat; ++r)
+            {
+                bench_fn(id, myStart, ld_ptr, st_ptr);
+            }
+        }
+
+        STOP_TIME(bench);
+
+        bench_time = GET_TIME(bench);
+    }
+    printf("bench_time = %f\n", bench_time);
+    printf("Iterations = %ld\n", num_times*repeat);
+    printf("Vector Length per thread = %d\n", N_per_thread);
+    printf("Vector Length = %d\n", N);
+    printf("MIt/s = %f\n", num_times*repeat*(double)N*1e-6/bench_time);
+    printf("Size per thread = %f MB\n", (LD_stream_sz + ST_stream_sz)*(double)N_per_thread*sizeof(double)/(1000.0*1000.0));
+
+    //calculate bandwidth
+    double total_bytes = num_times*repeat*((double)LD_stream_sz + (double)ST_stream_sz)*(double)N*sizeof(double);
+    double bw = (total_bytes/bench_time)*1e-6;
+
+    free(ld_ptr);
+    free(st_ptr);
+    free(ld_stream);
+    free(st_stream);
+    free(myStart);
+
+    return bw;
+}
+
+int main(int argc, char** argv)
+{
+    char* HLINE="\n-------------------------------------------------------\n";
+    printf("%s LD_ST_BENCH %s\n", HLINE, HLINE);
+#ifdef CODE_IN_INTEL_ASM //Intel intrin
+    char* type = ASM_NAME;
+    printf("Method = INTEL_ASM:%s\n", type);
+#elif defined(CODE_IN_ARM_ASM) //Intel intrin
+    char* type = ASM_NAME;
+    printf("Method = ARM_ASM:%s\n", type);
+#elif defined CODE_IN_C
+    printf("C code called\n");
+#else
+    printf("Error: Code type not correct\n");
+    exit(-1);
+#endif
+
+    int repeat    = 20;
+    if(argc > 1)
+    {
+        repeat    = atoi(argv[1]);
+    }
+
+    double bw = measure_bw(repeat);
+
+    printf("Measured Bandwidth = %6.2f MB/s\n", bw);
+    printf("Measured Bandwidth with WA (RFO) = %6.2f MB/s\n", bw*(LOAD+2*STORE)/((double)(LOAD+STORE)));
+
+    printf("%s", HLINE);
+    printf("Note: The benchmark might not be ideal for measuring lower cache bandwidth as it incurs additional 'ADD' operation\n");
+    return 0;
+}

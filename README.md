@@ -23,9 +23,7 @@ Examples for C method, g++ compiler, 10 threads, and 100 MB per thread
  * Copy with 19 streams (like LBM codes) : ./LDST-bench C g++ 10 19 19 100 -v
  
  <p align="center">
-  <figcaption>Scaling on Skylake</figcaption>
   <img width="280" height="400" src="test_scripts/scaling_plot_skx.png">
-  <figcaption>Heatmap for load store variation</figcaption>
   <img width="460" height="400" src="test_scripts/matrix_skx.png">
 </p>
 

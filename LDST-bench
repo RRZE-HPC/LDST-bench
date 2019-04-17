@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ "$#" -le 5 ]; then
-    echo "Usage : ./bench.sh [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -v[OPTIONAL]"
+    echo "Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -v[OPTIONAL]"
     exit
 fi
 

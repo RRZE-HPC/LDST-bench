@@ -28,7 +28,7 @@ For C method, g++ compiler, 10 threads, and 100 MB per thread
 
 # Showcase
  <p align="center">
-  <img width="280" height="400" src="test_scripts/scaling_plot_skx.png">
-  <img width="460" height="400" src="test_scripts/matrix_skx.png">
+  <img width="320" height="400" src="test_scripts/scaling_plot_skx.png">
+  <img width="480" height="400" src="test_scripts/matrix_skx.png">
 </p>
 

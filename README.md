@@ -24,6 +24,7 @@ Examples for C method, g++ compiler, 10 threads, and 100 MB per thread
  
  <p align="center">
   <img width="280" height="400" src="test_scripts/scaling_plot_skx.png">
+  <figcaption>Scaling on Skylake</figcaption>
   <img width="460" height="400" src="test_scripts/matrix_skx.png">
 </p>
 

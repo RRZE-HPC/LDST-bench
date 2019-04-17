@@ -20,3 +20,6 @@ Examples for C method, g++ compiler, 10 threads, and 100 MB per thread
  * Copy : ./LDST-bench C g++ 10 1 1 100
  * Load : ./LDST-bench C g++ 10 1 0 100
  * Copy with 19 streams (like LBM codes) : ./LDST-bench C g++ 10 19 19 100 -v
+ 
+![Screenshot](test_scripts/matrix_ivb.png)
+

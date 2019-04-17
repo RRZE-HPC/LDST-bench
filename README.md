@@ -7,13 +7,14 @@ However the bandwidth of the processors can vary depending on:
 
 LDST-bench allows to quantify all the combinations of loads and store streams
 
-Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -v[OPTIONAL]
+Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -c [LIKWID pinning string, OPTIONAL] -v[OPTIONAL]
   * METHOD : what type of code, available options C, INTEL_ASM:SCALAR, INTEL_ASM:SSE, INTEL_ASM:AVX, INTEL_ASM:AVX512, ARM_ASM:NEON
   * COMPILER : specify the C++ compiler to use, supported and tested compilers icpc,g++,clang
   * NTHREAD : number of threads for benchmarking, currently only close (fill) pin is supported
   * NUM_LOAD : number of load streams
   * NUM_STORE : number of store streams
   * SIZE_PER_THREAD : Combined size of all streams per thread in MB
+  * -c : Pinning string for LIKWID, if using LIKWID for pinning (recommended)
   * -v : Specify for verbose output
 
 Examples for C method, g++ compiler, 10 threads, and 100 MB per thread

@@ -233,7 +233,7 @@ double measure_bw(int repeat)
 int main(int argc, char** argv)
 {
     char* HLINE="\n-------------------------------------------------------\n";
-    printf("%s LD_ST_BENCH %s\n", HLINE, HLINE);
+    printf("%s LDST-BENCH %s\n", HLINE, HLINE);
 #ifdef CODE_IN_INTEL_ASM //Intel intrin
     char* type = ASM_NAME;
     printf("Method = INTEL_ASM:%s\n", type);

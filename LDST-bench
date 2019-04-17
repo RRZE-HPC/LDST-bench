@@ -1,7 +1,8 @@
 #!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 if [ "$#" -le 5 ]; then
-    echo "Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -v[OPTIONAL]"
+    echo "Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_PER_THREAD(MB)] -c [LIKWID pinning statement,optional] -v[OPTIONAL]"
     exit
 fi
 
@@ -11,12 +12,40 @@ nthread=$3
 nload=$4
 nstore=$5
 size=$6
-verbose=$7
-#repeat=$7
+pin=""
+verbose=""
+
+while :; do
+    case $7 in
+        -c)
+            if [ "$8" ]; then
+                pin=$8
+                shift
+            else
+                echo "Pinning string not provided"
+                exit
+            fi
+            ;;
+        -v|--verbose)
+            verbose=1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+            echo "Unknown options ($7) ignored"
+            ;;
+        *)
+            break
+    esac
+
+    shift
+done
 
 save_dir=$PWD
 
-SRC_FOLDER="src"
+SRC_FOLDER="$DIR/src"
 #echo string in between two string in a file
 cp $SRC_FOLDER/bench.cpp.in $SRC_FOLDER/bench.cpp
 
@@ -47,7 +76,7 @@ for region in $regions; do
     unroll_time=$(echo $unroll_factor | cut -d" " -f$region_ctr)
     ld_unrolled=""
     for (( i=0; i<$unroll_time; i++ )); do
-        ld=$(./substitute.sh "@" "$i" "$region""_template_file.txt")
+        ld=$($DIR/substitute.sh "@" "$i" "$region""_template_file.txt")
         ld_unrolled=$(echo "$ld_unrolled" "$ld")
     done
     rm -r "$region""_template_file.txt"
@@ -84,12 +113,12 @@ fi
 
 
 #generate assembly for reference
-if [ "$verbose" = "-v" ]; then
+if [ "$verbose" = "1" ]; then
     CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
-        OPT_LEVEL=-O$opt_level make asm
+        OPT_LEVEL=-O$opt_level make -C $DIR asm
 else
     CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
-        OPT_LEVEL=-O$opt_level make asm &> /dev/null
+        OPT_LEVEL=-O$opt_level make -C $DIR asm &> /dev/null
 fi
 
 #remove all vaddpd; to benchmark load and store
@@ -97,12 +126,12 @@ fi
 
 #now build the benchmark
 #CXX=icpc LOAD=$nload STORE=$nstore SIZE=$size make from_asm
-if [ "$verbose" = "-v" ]; then
+if [ "$verbose" = "1" ]; then
     CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
-        OPT_LEVEL=-O$opt_level make
+        OPT_LEVEL=-O$opt_level make -C $DIR
 else
     CXX=$compiler LOAD=$nload STORE=$nstore SIZE=$size EXTRA_FLAG=$extra_flag \
-        OPT_LEVEL=-O$opt_level make &> /dev/null
+        OPT_LEVEL=-O$opt_level make -C $DIR &> /dev/null
 fi
 
 
@@ -111,14 +140,18 @@ fi
 #fi
 #OMP_NUM_THREADS=$nthread KMP_AFFINITY=granularity=fine,compact,1,0 taskset -c \
 #0-$((nthread-1)) ./bench_exec #$repeat
-
-OMP_NUM_THREADS=$nthread OMP_PLACES=cores"($nthread)" OMP_PROC_BIND=close \
-./bench_exec #$repeat
+if [[ -z "${pin// }" ]]; then
+    echo "Pinning statement ignored, likwid not available, using OMP affinity"
+    OMP_NUM_THREADS=$nthread OMP_PLACES=cores"($nthread)" OMP_PROC_BIND=close \
+        $DIR/bench_exec #$repeat
+else
+    OMP_NUM_THREADS=$nthread likwid-pin -c $pin $DIR/bench_exec #$repeat
+fi
 
 
 #cd $save_dir
-if [ "$verbose" = "-v" ]; then
-    make clean
+if [ "$verbose" = "1" ]; then
+    make -C $DIR clean
 else
-    make clean &> /dev/null
+    make -C $DIR clean &> /dev/null
 fi

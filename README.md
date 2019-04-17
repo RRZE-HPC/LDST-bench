@@ -2,7 +2,7 @@
 
 Performance modelling and estimation constantly requires the bandwidth. 
 However the bandwidth of the processors can vary depending on:
-* Load store ratio
+* Load, store ratio
 * Number of streams
 
 LDST-bench allows to quantify all the combinations of loads and store streams

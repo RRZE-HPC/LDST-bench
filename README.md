@@ -15,3 +15,8 @@ Usage : ./LDST-bench [METHOD] [COMPILER] [NTHREAD] [NUM_LOAD] [NUM_STORE] [SIZE_
   * NUM_STORE : number of store streams
   * SIZE_PER_THREAD : Combined size of all streams per thread in MB
   * -v : Specify for verbose output
+
+Examples
+ * Copy : ./LDST-bench C g++ 10 1 1 100
+ * Load : ./LDST-bench C g++ 10 1 0 100
+ * Copy with 19 streams (like LBM codes) : ./LDST-bench C icpc 10 19 19 100 -v

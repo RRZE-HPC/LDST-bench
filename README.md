@@ -12,11 +12,11 @@ LDST-bench allows to quantify all the combinations of loads and store streams
 ./LDST-bench [METHOD] [COMPILER] [NTHREADS] [NLOADS] [NSTORES] [SIZE_PER_THREAD(MB)] -c [LIKWID pinning string, OPTIONAL] -v[OPTIONAL]
   * METHOD : what type of code, available options: C, INTEL_ASM:SCALAR, INTEL_ASM:SSE, INTEL_ASM:AVX, INTEL_ASM:AVX512, ARM_ASM:NEON
   * COMPILER : specify the C++ compiler to use, supported and tested compilers icpc,g++,clang
-  * NTHREADS : number of threads for benchmarking, currently only close (fill) pin is supported
+  * NTHREADS : number of threads for benchmarking
   * NLOADS : number of load streams
   * NSTORES : number of store streams
   * SIZE_PER_THREAD : Combined size of all streams per thread in MB
-  * -c : Pinning string for LIKWID, if using LIKWID for pinning (recommended)
+  * -c : Pinning string for LIKWID, if using LIKWID for pinning (recommended), if not specified OMP affinity with 'close' strategy will be used
   * -v : Specify for verbose output
 
 # Examples 

@@ -46,6 +46,20 @@ done
 save_dir=$PWD
 
 SRC_FOLDER="$DIR/src"
+time_stamp=$(date +"%Y%m%d-%H%M%S%N")
+mkdir -p "/tmp"
+TMP_FOLDER="/tmp/LD_ST_$time_stamp"
+mkdir $TMP_FOLDER
+exitFlag=$(echo $?)
+if [ $exitFlag -ne 0 ]; then
+    echo "Could not create temporary directory in $TMP_FOLDER"
+    exit
+fi
+cp -r $DIR/* $TMP_FOLDER/.
+DIR=$TMP_FOLDER
+cd $TMP_FOLDER
+SRC_FOLDER="src"
+
 #echo string in between two string in a file
 cp $SRC_FOLDER/bench.cpp.in $SRC_FOLDER/bench.cpp
 
@@ -155,3 +169,7 @@ if [ "$verbose" = "1" ]; then
 else
     make -C $DIR clean &> /dev/null
 fi
+
+cd - &> /dev/null
+
+rm -r -f $TMP_FOLDER

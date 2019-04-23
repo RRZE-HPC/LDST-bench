@@ -22,6 +22,29 @@ inline void bench_fn(int id, int *myStart, double **ld_ptr, double **st_ptr)
     unroll_fac = ASM_UNROLL*4;
 #endif
 
+#ifdef CODE_IN_C
+    #define ASM_UNROLL 1
+    #define VAR double
+#endif
+
+    double zeroPtr[ASM_UNROLL];
+    VAR ZERO;
+    for(int i=0; i<ASM_UNROLL; ++i)
+    {
+        zeroPtr[i]=0;
+    }
+#ifdef CODE_IN_INTEL_ASM //Intel intrin
+    ZERO = ASM(load)(zeroPtr);
+    VAR ld_val_1,  ld_val_2, ld_val_3, ld_val_4;
+    ld_val = ld_val_1 = ld_val_2 = ld_val_3 = ld_val_4 = ZERO;
+#elif defined(CODE_IN_ARM_ASM)
+    ZERO = ASM(ld1)(zeroPtr);
+    VAR ld_val_1, ld_val_2, ld_val_3, ld_val_4;
+    ld_val = ld_val_1 = ld_val_2 = ld_val_3 = ld_val_4 = ZERO;
+#else
+    ZERO = zeroPtr[0];
+#endif
+
 #pragma vector temporal
 #pragma simd
     for(int i=myStart[id]; i<myStart[id+1]; i+=unroll_fac)
@@ -33,17 +56,17 @@ inline void bench_fn(int id, int *myStart, double **ld_ptr, double **st_ptr)
         VAR tmp2ld@ = (ASM(load)(&curr_ld_ptr_@[i+ASM_UNROLL]));
         VAR tmp3ld@ = (ASM(load)(&curr_ld_ptr_@[i+2*ASM_UNROLL]));
         VAR tmp4ld@ = (ASM(load)(&curr_ld_ptr_@[i+3*ASM_UNROLL]));
-        ld_val = ASM(add)(ld_val, tmp1ld@);
-        ld_val = ASM(add)(ld_val, tmp2ld@);
-        ld_val = ASM(add)(ld_val, tmp3ld@);
-        ld_val = ASM(add)(ld_val, tmp4ld@);
+        ld_val_1 = ASM(add)(ld_val_1, tmp1ld@);
+        ld_val_2 = ASM(add)(ld_val_2, tmp2ld@);
+        ld_val_3 = ASM(add)(ld_val_3, tmp3ld@);
+        ld_val_4 = ASM(add)(ld_val_4, tmp4ld@);
         //#UNROLL_END#
         //#UNROLL_BEGIN(Intel_st, STORE)#
         double* curr_st_ptr_@ = st_ptr[@];
-        VAR tmp1st@; ASM(store)(&curr_st_ptr_@[i], tmp1st@);
-        VAR tmp2st@; ASM(store)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
-        VAR tmp3st@; ASM(store)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
-        VAR tmp4st@; ASM(store)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
+        VAR tmp1st@ = ZERO; ASM(store)(&curr_st_ptr_@[i], tmp1st@);
+        VAR tmp2st@ = ZERO; ASM(store)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
+        VAR tmp3st@ = ZERO; ASM(store)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
+        VAR tmp4st@ = ZERO; ASM(store)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
         //#UNROLL_END#
 #elif defined(CODE_IN_ARM_ASM) //Intel intrin
         //#UNROLL_BEGIN(Arm_ld, LOAD)#
@@ -52,17 +75,17 @@ inline void bench_fn(int id, int *myStart, double **ld_ptr, double **st_ptr)
         VAR tmp2ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+ASM_UNROLL]));
         VAR tmp3ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+2*ASM_UNROLL]));
         VAR tmp4ld@ = (ASM(ld1)(&curr_ld_ptr_@[i+3*ASM_UNROLL]));
-        ld_val = ASM(add)(ld_val, tmp1ld@);
-        ld_val = ASM(add)(ld_val, tmp2ld@);
-        ld_val = ASM(add)(ld_val, tmp3ld@);
-        ld_val = ASM(add)(ld_val, tmp4ld@);
+        ld_val_1 = ASM(add)(ld_val_1, tmp1ld@);
+        ld_val_2 = ASM(add)(ld_val_2, tmp2ld@);
+        ld_val_3 = ASM(add)(ld_val_3, tmp3ld@);
+        ld_val_4 = ASM(add)(ld_val_4, tmp4ld@);
         //#UNROLL_END#
         //#UNROLL_BEGIN(Arm_st, STORE)#
         double* curr_st_ptr_@ = st_ptr[@];
-        VAR tmp1st@; ASM(st1)(&curr_st_ptr_@[i], tmp1st@);
-        VAR tmp2st@; ASM(st1)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
-        VAR tmp3st@; ASM(st1)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
-        VAR tmp4st@; ASM(st1)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
+        VAR tmp1st@ = ld_val_1; ASM(st1)(&curr_st_ptr_@[i], tmp1st@);
+        VAR tmp2st@ = ld_val_2; ASM(st1)(&curr_st_ptr_@[i+ASM_UNROLL], tmp2st@);
+        VAR tmp3st@ = ld_val_3; ASM(st1)(&curr_st_ptr_@[i+2*ASM_UNROLL], tmp3st@);
+        VAR tmp4st@ = ld_val_4; ASM(st1)(&curr_st_ptr_@[i+3*ASM_UNROLL], tmp4st@);
         //#UNROLL_END#
 #else
         //need to unroll it completely
@@ -75,6 +98,13 @@ inline void bench_fn(int id, int *myStart, double **ld_ptr, double **st_ptr)
         //#UNROLL_END#
 #endif
     }
+
+#ifndef CODE_IN_C
+    ld_val = ASM(add)(ld_val, ld_val_1);
+    ld_val = ASM(add)(ld_val, ld_val_2);
+    ld_val = ASM(add)(ld_val, ld_val_3);
+    ld_val = ASM(add)(ld_val, ld_val_4);
+#endif
 
     dummy(ld_ptr[0], st_ptr[0], &ld_val);
 }
